@@ -1,9 +1,7 @@
-.classpath
-.project
 .settings
 local.properties
-bin/
-gen/
+bin/*
+gen/*
 /testbin/com/ichi2/anki/AllTests.class
 /testbin/com/ichi2/anki/AnkiDroidTest.class
 /test/com/ichi2/anki/AllTests.java
