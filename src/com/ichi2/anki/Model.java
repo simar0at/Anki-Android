@@ -20,6 +20,7 @@ package com.ichi2.anki;
 import android.content.ContentValues;
 import android.database.Cursor;
 
+import java.io.File;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -117,8 +118,26 @@ public class Model {
         sModels = new HashMap<Long, Model>();
         sCardModelToModelMap = new HashMap<Long, Model>();
     }
+    
+    static private File mFilesDir = null; //Android storage path, wont change during execution ... 
 
-
+    /**
+     * Returns a Model based on the submitted identifier. If a model id is submitted (isModelId = true), then the Model
+     * data and all related CardModel and FieldModel data are loaded, unless the id is the same as one of the
+     * currentModel. If a cardModel id is submitted, then the related Model data and all related CardModel and
+     * FieldModel data are loaded unless the cardModel id is already in the cardModel map. FIXME: nothing is done to
+     * treat db failure or non-existing identifiers
+     * 
+     * @param deck The deck we are working with
+     * @param identifier a cardModel id or a model id
+     * @param isModelId if true then the submitted identifier is a model id; otherwise the identifier is a cardModel id
+     * @param filesDir from some ContentWrapper sub classes getFilesDir() for later use (custom font)
+     * @return
+     */
+    protected static Model getModel(Deck deck, long identifier, boolean isModelId, File filesDir) {
+    	mFilesDir = filesDir;
+    	return getModel(deck, identifier, isModelId);
+    }
     /**
      * Returns a Model based on the submitted identifier. If a model id is submitted (isModelId = true), then the Model
      * data and all related CardModel and FieldModel data are loaded, unless the id is the same as one of the
@@ -344,19 +363,25 @@ public class Model {
         sb.append("<!-- ").append(percentage).append(" % display font size-->");
         sb.append("<style type=\"text/css\">\n");
         CardModel myCardModel = mCardModelsMap.get(myCardModelId);
-
+        // special font
+        // according to http://stackoverflow.com/questions/1344080/how-to-use-custom-font-with-webview
+        // this should do the trick, but it doesn't work for me.
+        if (getFilesDir() != null) {
+            sb.append("@font-face {\n  font-family: \"DejaVuSans\";\n  src: url('file://" +
+                    getFilesDir().getAbsolutePath() + "/DejaVuSans.ttf');\n}\n");	
+        }
         // body background
         if (null != myCardModel.getLastFontColour() && 0 < myCardModel.getLastFontColour().trim().length()) {
             sb.append("body {background-color:").append(myCardModel.getLastFontColour()).append(";}\n");
         }
         // question
         sb.append(".").append(Reviewer.QUESTION_CLASS).append(" {\n");
-        sb.append(calculateDisplay(percentage, myCardModel.getQuestionFontFamily(), myCardModel.getQuestionFontSize(),
+        sb.append(calculateDisplay(percentage, "DejaVuSans, " + myCardModel.getQuestionFontFamily(), myCardModel.getQuestionFontSize(),
                 myCardModel.getQuestionFontColour(), myCardModel.getQuestionAlign(), false));
         sb.append("}\n");
         // answer
         sb.append(".").append(Reviewer.ANSWER_CLASS).append(" {\n");
-        sb.append(calculateDisplay(percentage, myCardModel.getAnswerFontFamily(), myCardModel.getAnswerFontSize(),
+        sb.append(calculateDisplay(percentage, "DejaVuSans, " + myCardModel.getAnswerFontFamily(), myCardModel.getAnswerFontSize(),
                 myCardModel.getAnswerFontColour(), myCardModel.getAnswerAlign(), false));
         sb.append("}\n");
         // css for fields. Gets css for all fields no matter whether they actually are used in a given card model
@@ -376,8 +401,12 @@ public class Model {
         return sb.toString();
     }
 
+    private File getFilesDir() {
+		return mFilesDir;
+	}
 
-    private static String calculateDisplay(int percentage, String fontFamily, int fontSize, String fontColour,
+
+	private static String calculateDisplay(int percentage, String fontFamily, int fontSize, String fontColour,
             int align, boolean isField) {
         StringBuffer sb = new StringBuffer();
         if (null != fontFamily && 0 < fontFamily.trim().length()) {

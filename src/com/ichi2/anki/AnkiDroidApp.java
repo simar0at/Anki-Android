@@ -35,6 +35,10 @@ import com.tomgibara.android.veecheck.Veecheck;
 import com.tomgibara.android.veecheck.util.PrefSettings;
 
 import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 
 /**
  * Application class. This file mainly contains Veecheck stuff.
@@ -99,6 +103,27 @@ public class AnkiDroidApp extends Application {
             // Reason: apply() not available on Android 1.5
             editor.commit();
         }
+        
+        // unpack the DejaVuSans.ttf if it doesn't exist
+        if (!new File(getFilesDir().getAbsolutePath() + "/DejaVuSans.ttf").exists())
+        try {
+			OutputStream out = openFileOutput("DejaVuSans.ttf", MODE_WORLD_READABLE);
+			InputStream in = getAssets().open("DejaVuSans.ttf");
+			byte[] buffer = new byte[4096];
+			int len = in.read(buffer);
+			while (len >= 0) {
+				out.write(buffer, 0, len);
+				len = in.read(buffer);
+			}
+			in.close();
+			out.close();
+		} catch (FileNotFoundException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
 
         // Reschedule the checks - we need to do this if the settings have
         // changed (as above)

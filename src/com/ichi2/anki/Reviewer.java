@@ -1281,9 +1281,9 @@ public class Reviewer extends Activity {
         // Add CSS for font color and font size
         if (mCurrentCard != null) {
             Deck currentDeck = AnkiDroidApp.deck();
-            Model myModel = Model.getModel(currentDeck, mCurrentCard.getCardModelId(), false);
+            Model myModel = Model.getModel(currentDeck, mCurrentCard.getCardModelId(), false, getFilesDir());
             baseUrl = Utils.getBaseUrl(myModel, mDeckFilename);
-            content = myModel.getCSSForFontColorSize(mCurrentCard.getCardModelId(), mDisplayFontSize) + content;
+            content =  myModel.getCSSForFontColorSize(mCurrentCard.getCardModelId(), mDisplayFontSize) + content;
         } else {
             mCard.getSettings().setDefaultFontSize(calculateDynamicFontSize(content));
             baseUrl = "file://" + mDeckFilename.replace(".anki", ".media/");
