@@ -24,6 +24,10 @@ import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Random;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+import com.AzizHuss.ArabicReshaper.ArabicReshape;
 
 /**
  * A card is a presentation of a fact, and has two sides: a question and an answer. Any number of fields can appear on
@@ -74,6 +78,8 @@ public class Card {
     private static final int MATURE_THRESHOLD = 21;
 
     private static final double MAX_TIMER = 60.0;
+    
+    private static Pattern arabicPattern = null;
 
     // BEGIN SQL table entries
     private long mId; // Primary key
@@ -138,6 +144,11 @@ public class Card {
     private boolean isLeechSuspended;
 
     public Card(Deck deck, Fact fact, CardModel cardModel, double created) {
+    	if (arabicPattern == null)
+    	{
+	    	//TODO: Does this work with more than one extra tag or sth. else?
+    		arabicPattern = Pattern.compile("((?:\\u0640{1}.*?\\u0640{1})|(?:\\p{InArabic}[\\p{InArabic}| |(?:&\\w+;)]*))"); // already mangled Strings start with \u0640
+    	}
         mTags = "";
         mTagsBySrc = new String[TAGS_TEMPL + 1];
         mTagsBySrc[TAGS_FACT] = "";
@@ -508,8 +519,29 @@ public class Card {
             mModified = cursor.getDouble(4);
             mTags = cursor.getString(5);
             mOrdinal = cursor.getInt(6);
-            mQuestion = cursor.getString(7);
-            mAnswer = cursor.getString(8);
+	        mQuestion = cursor.getString(7);
+	        mAnswer = cursor.getString(8);
+	        //TODO: The reshaped strings are saved. Why? Should we suppress this?       
+	        Matcher splitUp = arabicPattern.matcher(mQuestion);
+	        if (splitUp.find())
+	        {
+	        	StringBuffer tmp = new StringBuffer();
+	        	do {
+	        		splitUp.appendReplacement(tmp, (splitUp.group(1).charAt(0) == ('\u0640')) ? splitUp.group(1) : ArabicReshape.reshape_browser(splitUp.group(1)));
+	        	} while (splitUp.find());
+	        	splitUp.appendTail(tmp);
+	        	mQuestion = tmp.toString();
+	        }	        
+	        splitUp = arabicPattern.matcher(mAnswer);
+	        if (splitUp.find())
+	        {
+	        	StringBuffer tmp = new StringBuffer();
+	        	do {
+	        		splitUp.appendReplacement(tmp, (splitUp.group(1).charAt(0) == ('\u0640')) ? splitUp.group(1) : ArabicReshape.reshape_browser(splitUp.group(1)));
+	        	} while (splitUp.find());
+	        	splitUp.appendTail(tmp);
+	        	mAnswer = tmp.toString();
+	        }	        
             mPriority = cursor.getInt(9);
             mInterval = cursor.getDouble(10);
             mLastInterval = cursor.getDouble(11);
