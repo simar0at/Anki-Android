@@ -175,6 +175,7 @@ public class DeckTask extends AsyncTask<DeckTask.TaskData, DeckTask.TaskData, De
         Deck deck = params[0].getDeck();
         Card oldCard = params[0].getCard();
         int ease = params[0].getInt();
+        boolean lastCardInQueue = params[0].isLastCardInQueue();
         Card newCard;
 
         AnkiDb ankiDB = AnkiDatabaseManager.getDatabase(deck.getDeckPath());
@@ -182,12 +183,12 @@ public class DeckTask extends AsyncTask<DeckTask.TaskData, DeckTask.TaskData, De
         try {
             if (oldCard != null) {
                 deck.answerCard(oldCard, ease);
-                // Log.i(AnkiDroidApp.TAG, "leech flag: " + oldCard.getLeechFlag());
+                Log.i(AnkiDroidApp.TAG, "leech flag: " + oldCard.getLeechFlag());
             }
 
             newCard = deck.getCard();
             if (oldCard != null) {
-                publishProgress(new TaskData(newCard, oldCard.getLeechFlag(), oldCard.getSuspendedFlag()));
+                publishProgress(new TaskData(newCard, oldCard.getLeechFlag(), oldCard.getSuspendedFlag(), lastCardInQueue));
             } else {
                 publishProgress(new TaskData(newCard));
             }
@@ -203,23 +204,23 @@ public class DeckTask extends AsyncTask<DeckTask.TaskData, DeckTask.TaskData, De
 
     private TaskData doInBackgroundLoadDeck(TaskData... params) {
         String deckFilename = params[0].getString();
-        // Log.i(AnkiDroidApp.TAG, "doInBackgroundLoadDeck - deckFilename = " + deckFilename);
+        Log.i(AnkiDroidApp.TAG, "doInBackgroundLoadDeck - deckFilename = " + deckFilename);
 
-        // Log.i(AnkiDroidApp.TAG, "loadDeck - SD card mounted and existent file -> Loading deck...");
+        Log.i(AnkiDroidApp.TAG, "loadDeck - SD card mounted and existent file -> Loading deck...");
         try {
             // Open the right deck.
             Deck deck = Deck.openDeck(deckFilename);
             // Start by getting the first card and displaying it.
             Card card = deck.getCard();
-            // Log.i(AnkiDroidApp.TAG, "Deck loaded!");
+            Log.i(AnkiDroidApp.TAG, "Deck loaded!");
             
             return new TaskData(DECK_LOADED, deck, card);
         } catch (SQLException e) {
-            // Log.i(AnkiDroidApp.TAG, "The database " + deckFilename + " could not be opened = " + e.getMessage());
+            Log.i(AnkiDroidApp.TAG, "The database " + deckFilename + " could not be opened = " + e.getMessage());
             return new TaskData(DECK_NOT_LOADED);
         } catch (CursorIndexOutOfBoundsException e) {
             // XXX: Where is this exception thrown?
-            // Log.i(AnkiDroidApp.TAG, "The deck has no cards = " + e.getMessage());
+            Log.i(AnkiDroidApp.TAG, "The deck has no cards = " + e.getMessage());
             return new TaskData(DECK_EMPTY);
         }
     }
@@ -275,12 +276,16 @@ public class DeckTask extends AsyncTask<DeckTask.TaskData, DeckTask.TaskData, De
     private TaskData doInBackgroundUndo(TaskData... params) {
         Deck deck = params[0].getDeck();
         Card newCard;
+        long currentCardId = params[0].getCard().getId();
 
         AnkiDb ankiDB = AnkiDatabaseManager.getDatabase(deck.getDeckPath());
         ankiDB.getDatabase().beginTransaction();
         try {
-        	deck.undo();
+        	long oldCardId = deck.undo(currentCardId);
             newCard = deck.getCard();
+            if (oldCardId != 0) {
+            	newCard = deck.cardFromId(oldCardId);
+            }
             publishProgress(new TaskData(newCard));
             ankiDB.getDatabase().setTransactionSuccessful();
         } finally {
@@ -294,12 +299,16 @@ public class DeckTask extends AsyncTask<DeckTask.TaskData, DeckTask.TaskData, De
     private TaskData doInBackgroundRedo(TaskData... params) {
         Deck deck = params[0].getDeck();
         Card newCard;
+        long currentCardId = params[0].getCard().getId();
 
         AnkiDb ankiDB = AnkiDatabaseManager.getDatabase(deck.getDeckPath());
         ankiDB.getDatabase().beginTransaction();
         try {
-        	deck.redo();
+        	long oldCardId = deck.redo(currentCardId);
             newCard = deck.getCard();
+            if (oldCardId != 0) {
+            	newCard = deck.cardFromId(oldCardId);
+            }
             publishProgress(new TaskData(newCard));
             ankiDB.getDatabase().setTransactionSuccessful();
         } finally {
@@ -327,12 +336,22 @@ public class DeckTask extends AsyncTask<DeckTask.TaskData, DeckTask.TaskData, De
         private String mMsg;
         private boolean previousCardLeech;     // answer card resulted in card marked as leech
         private boolean previousCardSuspended; // answer card resulted in card marked as leech and suspended
+        private boolean mLastCardInQueue;
 
 
         public TaskData(int value, Deck deck, Card card) {
             this(value);
             mDeck = deck;
             mCard = card;
+            mLastCardInQueue = false;
+        }
+
+
+        public TaskData(int value, Deck deck, boolean lastCardInQueue, Card card) {
+            this(value);
+            mDeck = deck;
+            mCard = card;
+            mLastCardInQueue = lastCardInQueue;
         }
 
 
@@ -342,10 +361,12 @@ public class DeckTask extends AsyncTask<DeckTask.TaskData, DeckTask.TaskData, De
             previousCardSuspended = false;
         }
 
-        public TaskData(Card card, boolean markedLeech, boolean suspendedLeech) {
+
+        public TaskData(Card card, boolean markedLeech, boolean suspendedLeech, boolean lastCardInQueue) {
             mCard = card;
             previousCardLeech = markedLeech;
             previousCardSuspended = suspendedLeech;
+            mLastCardInQueue = lastCardInQueue;
         }
 
 
@@ -386,6 +407,11 @@ public class DeckTask extends AsyncTask<DeckTask.TaskData, DeckTask.TaskData, De
 
         public boolean isPreviousCardSuspended() {
             return previousCardSuspended;
+        }
+
+
+        public boolean isLastCardInQueue() {
+            return mLastCardInQueue;
         }
     }
 

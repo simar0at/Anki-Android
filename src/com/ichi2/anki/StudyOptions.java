@@ -25,6 +25,7 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.content.SharedPreferences.Editor;
+import android.content.pm.PackageManager.NameNotFoundException;
 import android.content.res.Resources;
 import android.net.Uri;
 import android.os.Bundle;
@@ -45,6 +46,7 @@ import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.CheckBox;
 import android.widget.CheckedTextView;
+import android.widget.CompoundButton;
 import android.widget.EditText;
 import android.widget.ListView;
 import android.widget.Spinner;
@@ -58,7 +60,6 @@ import com.tomgibara.android.veecheck.util.PrefSettings;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
-import java.lang.ref.WeakReference;
 import java.util.Arrays;
 import java.util.Calendar;
 import java.util.HashMap;
@@ -144,6 +145,8 @@ public class StudyOptions extends Activity {
     private int mNewDayStartsAt = 4;
     private long mLastTimeOpened;
     boolean mSyncEnabled = false;
+    boolean mNewVersion = false;
+    boolean mInvertedColors = false;
     
     /**
 * Alerts to inform the user about different situations
@@ -154,6 +157,7 @@ public class StudyOptions extends Activity {
     private AlertDialog mConnectionErrorAlert;
 	private AlertDialog mSyncLogAlert;
 	private AlertDialog mSyncConflictResolutionAlert;
+	private AlertDialog mNewVersionAlert;
 
     /*
 * Cram related
@@ -178,6 +182,7 @@ public class StudyOptions extends Activity {
     private EditText mEditNewPerDay;
     private EditText mEditSessionTime;
     private EditText mEditSessionQuestions;
+    private CheckBox mNightMode;
 
     /**
 * UI elements for "More Options" dialog
@@ -322,7 +327,7 @@ public class StudyOptions extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        // Log.i(AnkiDroidApp.TAG, "StudyOptions Activity");
+        Log.i(AnkiDroidApp.TAG, "StudyOptions Activity");
 
         if (hasErrorFiles()) {
             Intent i = new Intent(this, ErrorReporter.class);
@@ -346,15 +351,15 @@ public class StudyOptions extends Activity {
         Intent intent = getIntent();
         if ("android.intent.action.VIEW".equalsIgnoreCase(intent.getAction()) && intent.getDataString() != null) {
             mDeckFilename = Uri.parse(intent.getDataString()).getPath();
-            // Log.i(AnkiDroidApp.TAG, "onCreate - deckFilename from intent: " + mDeckFilename);
+            Log.i(AnkiDroidApp.TAG, "onCreate - deckFilename from intent: " + mDeckFilename);
         } else if (savedInstanceState != null) {
             // Use the same deck as last time Ankidroid was used.
             mDeckFilename = savedInstanceState.getString("deckFilename");
-            // Log.i(AnkiDroidApp.TAG, "onCreate - deckFilename from savedInstanceState: " + mDeckFilename);
+            Log.i(AnkiDroidApp.TAG, "onCreate - deckFilename from savedInstanceState: " + mDeckFilename);
         } else {
-            // // Log.i(AnkiDroidApp.TAG, "onCreate - " + preferences.getAll().toString());
+            // Log.i(AnkiDroidApp.TAG, "onCreate - " + preferences.getAll().toString());
             mDeckFilename = preferences.getString("deckFilename", null);
-            // Log.i(AnkiDroidApp.TAG, "onCreate - deckFilename from preferences: " + mDeckFilename);
+            Log.i(AnkiDroidApp.TAG, "onCreate - deckFilename from preferences: " + mDeckFilename);
         }
         if (!mSdCardAvailable) {
             showContentView(CONTENT_NO_EXTERNAL_STORAGE);
@@ -379,7 +384,7 @@ public class StudyOptions extends Activity {
        			}
        			return false;
        		}
-       	};	
+       	};
     }
 
     
@@ -405,12 +410,12 @@ public class StudyOptions extends Activity {
                 public void onReceive(Context context, Intent intent) {
                     String action = intent.getAction();
                     if (action.equals(Intent.ACTION_MEDIA_EJECT)) {
-                        // Log.i(AnkiDroidApp.TAG, "mUnmountReceiver - Action = Media Eject");
+                        Log.i(AnkiDroidApp.TAG, "mUnmountReceiver - Action = Media Eject");
                         closeOpenedDeck();
                         showContentView(CONTENT_NO_EXTERNAL_STORAGE);
                         mSdCardAvailable = false;
                     } else if (action.equals(Intent.ACTION_MEDIA_MOUNTED)) {
-                        // Log.i(AnkiDroidApp.TAG, "mUnmountReceiver - Action = Media Mounted");
+                        Log.i(AnkiDroidApp.TAG, "mUnmountReceiver - Action = Media Mounted");
                         mSdCardAvailable = true;
                         if (!mInDeckPicker) {
                             loadPreviousDeck();
@@ -430,19 +435,19 @@ public class StudyOptions extends Activity {
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        // Log.i(AnkiDroidApp.TAG, "StudyOptions - onDestroy()");
+        Log.i(AnkiDroidApp.TAG, "StudyOptions - onDestroy()");
         closeOpenedDeck();
         if (mUnmountReceiver != null) {
             unregisterReceiver(mUnmountReceiver);
         }
-        savePreferences("lastOpened");
+        savePreferences("close");
     }
 
 
     @Override
     public boolean onKeyDown(int keyCode, KeyEvent event)  {
         if (keyCode == KeyEvent.KEYCODE_BACK && event.getRepeatCount() == 0) {
-            // Log.i(AnkiDroidApp.TAG, "StudyOptions - onBackPressed()");
+            Log.i(AnkiDroidApp.TAG, "StudyOptions - onBackPressed()");
             closeOpenedDeck();
         }
 
@@ -561,6 +566,18 @@ public class StudyOptions extends Activity {
         mTextReviewsDue = (TextView) mStudyOptionsView.findViewById(R.id.studyoptions_reviews_due);
         mTextNewToday = (TextView) mStudyOptionsView.findViewById(R.id.studyoptions_new_today);
         mTextNewTotal = (TextView) mStudyOptionsView.findViewById(R.id.studyoptions_new_total);
+        mNightMode = (CheckBox) mStudyOptionsView.findViewById(R.id.studyoptions_night_mode);
+        mNightMode.setChecked(mInvertedColors);
+        mNightMode.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener(){
+            @Override
+            public void onCheckedChanged(CompoundButton buttonView,
+            boolean isChecked) {
+                if (mInvertedColors != isChecked) {
+                    mInvertedColors = isChecked;
+                    savePreferences("invertedColors");                    
+                }
+            }
+            });
 
         mEditNewPerDay = (EditText) mStudyOptionsView.findViewById(R.id.studyoptions_new_cards_per_day);
         mEditSessionTime = (EditText) mStudyOptionsView.findViewById(R.id.studyoptions_session_minutes);
@@ -746,20 +763,20 @@ public class StudyOptions extends Activity {
         // Dialog for selecting the cram tags
         activeCramTags.clear();
         allCramTags = AnkiDroidApp.deck().allTags_();
-        // Log.i(AnkiDroidApp.TAG, "all cram tags: " + Arrays.toString(allCramTags));
+        Log.i(AnkiDroidApp.TAG, "all cram tags: " + Arrays.toString(allCramTags));
 
         View contentView = getLayoutInflater().inflate(R.layout.studyoptions_cram_dialog_contents, null);
         mCramTagsListView = (ListView) contentView.findViewById(R.id.cram_tags_list);
-        mCramTagsListView.setAdapter(new ArrayAdapter<String>(this, R.layout.studyoptions_cram_dialog_item,
+        mCramTagsListView.setAdapter(new ArrayAdapter<String>(this, R.layout.dialog_check_item,
                     allCramTags));
         mCramTagsListView.setOnItemClickListener(new AdapterView.OnItemClickListener() {
             @Override
             public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
                 if (((CheckedTextView)view).isChecked()) {
-                    // Log.i(AnkiDroidApp.TAG, "unchecked tag: " + allCramTags[position]);
+                    Log.i(AnkiDroidApp.TAG, "unchecked tag: " + allCramTags[position]);
                     activeCramTags.remove(allCramTags[position]);
                 } else {
-                    // Log.i(AnkiDroidApp.TAG, "checked tag: " + allCramTags[position]);
+                    Log.i(AnkiDroidApp.TAG, "checked tag: " + allCramTags[position]);
                     activeCramTags.add(allCramTags[position]);
                 }
             }
@@ -978,12 +995,12 @@ public class StudyOptions extends Activity {
 
     @Override
     protected void onSaveInstanceState(Bundle outState) {
-        // Log.i(AnkiDroidApp.TAG, "onSaveInstanceState: " + mDeckFilename);
+        Log.i(AnkiDroidApp.TAG, "onSaveInstanceState: " + mDeckFilename);
         // Remember current deck's filename.
         if (mDeckFilename != null) {
             outState.putString("deckFilename", mDeckFilename);
         }
-        // Log.i(AnkiDroidApp.TAG, "onSaveInstanceState - Ending");
+        Log.i(AnkiDroidApp.TAG, "onSaveInstanceState - Ending");
     }
 
 
@@ -1090,7 +1107,7 @@ public class StudyOptions extends Activity {
     	if (Integer.valueOf(android.os.Build.VERSION.SDK) > 4) {
     		MyAnimation.slide(this, MyAnimation.RIGHT);
     	}
-        // // Log.i(AnkiDroidApp.TAG, "openDeckPicker - Ending");
+        // Log.i(AnkiDroidApp.TAG, "openDeckPicker - Ending");
     }
 
     public void openPersonalDeckPicker() {
@@ -1140,7 +1157,7 @@ public class StudyOptions extends Activity {
                     Log.e(AnkiDroidApp.TAG, "onCreate - The copy of country-capitals.anki to the sd card failed.");
                     return;
                 }
-                // Log.i(AnkiDroidApp.TAG, "onCreate - The copy of country-capitals.anki to the sd card was sucessful.");
+                Log.i(AnkiDroidApp.TAG, "onCreate - The copy of country-capitals.anki to the sd card was sucessful.");
             } catch (IOException e) {
                 e.printStackTrace();
             }
@@ -1178,8 +1195,8 @@ public class StudyOptions extends Activity {
         if (AnkiDroidApp.isUserLoggedIn()) {
             Deck deck = AnkiDroidApp.deck();
 
-            // Log.i(AnkiDroidApp.TAG, "Synchronizing deck " + mDeckFilename + ", conflict resolution: " + conflictResolution);
-            // Log.i(AnkiDroidApp.TAG, String.format(Utils.ENGLISH_LOCALE, "Before syncing - mod: %f, last sync: %f", deck.getModified(), deck.getLastSync()));
+            Log.i(AnkiDroidApp.TAG, "Synchronizing deck " + mDeckFilename + ", conflict resolution: " + conflictResolution);
+            Log.i(AnkiDroidApp.TAG, String.format(Utils.ENGLISH_LOCALE, "Before syncing - mod: %f, last sync: %f", deck.getModified(), deck.getLastSync()));
             Connection.syncDeck(syncListener, new Connection.Payload(new Object[] { username, password, deck,
                     mDeckFilename, conflictResolution }));
         } else {
@@ -1237,11 +1254,11 @@ public class StudyOptions extends Activity {
                 return;
             }
             // A deck was picked. Save it in preferences and use it.
-            // Log.i(AnkiDroidApp.TAG, "onActivityResult = OK");
+            Log.i(AnkiDroidApp.TAG, "onActivityResult = OK");
             mDeckFilename = intent.getExtras().getString(OPT_DB);
             savePreferences("deckFilename");
 
-            // // Log.i(AnkiDroidApp.TAG, "onActivityResult - deckSelected = " + deckSelected);
+            // Log.i(AnkiDroidApp.TAG, "onActivityResult - deckSelected = " + deckSelected);
             boolean updateAllCards = (requestCode == DOWNLOAD_SHARED_DECK);
             displayProgressDialogAndLoadDeck(updateAllCards);
 
@@ -1255,7 +1272,7 @@ public class StudyOptions extends Activity {
             // showOrHideAnswerField();
             // }
         } else if (requestCode == REQUEST_REVIEW) {
-            // Log.i(AnkiDroidApp.TAG, "Result code = " + resultCode);
+            Log.i(AnkiDroidApp.TAG, "Result code = " + resultCode);
             AnkiDroidApp.deck().updateCutoff();
             AnkiDroidApp.deck().reset();
             switch (resultCode) {
@@ -1306,10 +1323,14 @@ public class StudyOptions extends Activity {
         SharedPreferences preferences = PrefSettings.getSharedPrefs(getBaseContext());
         Editor editor = preferences.edit();
         if (str == "deckFilename") {
-            editor.putString("deckFilename", mDeckFilename);        
-        } else if (str == "lastOpened") {
-            editor.putLong("lastTimeOpened", System.currentTimeMillis());        	
+            editor.putString("deckFilename", mDeckFilename); 
+        } else if (str == "close") {
+        	editor.putLong("lastTimeOpened", System.currentTimeMillis());
+        	editor.putString("lastVersion", getVersion());
+        } else if (str == "invertedColors") {
+            editor.putBoolean("invertedColors", mInvertedColors);
         }
+
         editor.commit();
     }
 
@@ -1323,7 +1344,30 @@ public class StudyOptions extends Activity {
         mLastTimeOpened = preferences.getLong("lastTimeOpened", 0);
         mSyncEnabled = preferences.getBoolean("syncEnabled", false);
         mSwipeEnabled = preferences.getBoolean("swipe", false);
+        if (!preferences.getString("lastVersion", "").equals(getVersion())) {
+            Resources res = getResources();
+            AlertDialog.Builder builder = new AlertDialog.Builder(this);
+            builder.setTitle(res.getString(R.string.new_version_title) + " " + getVersion());
+            builder.setMessage(res.getString(R.string.new_version_text));
+            builder.setPositiveButton(res.getString(R.string.ok), null);
+            builder.setCancelable(true);
+            mNewVersion = true;
+            mNewVersionAlert = builder.create();
+        }
+        mInvertedColors = preferences.getBoolean("invertedColors", false);
         return preferences;
+    }
+
+
+    private String getVersion() {
+    	String versionNumber;
+    	try {
+            String pkg = this.getPackageName();
+            versionNumber = this.getPackageManager().getPackageInfo(pkg, 0).versionName;
+        } catch (NameNotFoundException e) {
+            versionNumber = "?";
+        }
+        return versionNumber;
     }
 
 
@@ -1333,7 +1377,7 @@ public class StudyOptions extends Activity {
 
 
     private void displayProgressDialogAndLoadDeck(boolean updateAllCards) {
-        // Log.i(AnkiDroidApp.TAG, "displayProgressDialogAndLoadDeck - Loading deck " + mDeckFilename);
+        Log.i(AnkiDroidApp.TAG, "displayProgressDialogAndLoadDeck - Loading deck " + mDeckFilename);
 
         // Don't open database again in onResume() until we know for sure this attempt to load the deck is finished
         // deckSelected = true;
@@ -1357,9 +1401,9 @@ public class StudyOptions extends Activity {
             }
         } else {
             if (mDeckFilename == null) {
-                // Log.i(AnkiDroidApp.TAG, "displayProgressDialogAndLoadDeck - SD card unmounted.");
+                Log.i(AnkiDroidApp.TAG, "displayProgressDialogAndLoadDeck - SD card unmounted.");
             } else if (!new File(mDeckFilename).exists()) {
-                // Log.i(AnkiDroidApp.TAG, "displayProgressDialogAndLoadDeck - The deck " + mDeckFilename + " does not exist.");
+                Log.i(AnkiDroidApp.TAG, "displayProgressDialogAndLoadDeck - The deck " + mDeckFilename + " does not exist.");
             }
 
             // Show message informing that no deck has been loaded
@@ -1367,9 +1411,9 @@ public class StudyOptions extends Activity {
         }
         // } else
         // {
-        // // Log.i(AnkiDroidApp.TAG, "displayProgressDialogAndLoadDeck - SD card unmounted.");
+        // Log.i(AnkiDroidApp.TAG, "displayProgressDialogAndLoadDeck - SD card unmounted.");
         // deckSelected = false;
-        // // Log.i(AnkiDroidApp.TAG, "displayProgressDialogAndLoadDeck - deckSelected = " + deckSelected);
+        // Log.i(AnkiDroidApp.TAG, "displayProgressDialogAndLoadDeck - deckSelected = " + deckSelected);
         // displaySdError();
         // }
     }
@@ -1426,6 +1470,10 @@ public class StudyOptions extends Activity {
                 } catch (Exception e) {
                     Log.e(AnkiDroidApp.TAG, "onPostExecute - Dialog dismiss Exception = " + e.getMessage());
                 }
+                if (mNewVersion) {
+                    mNewVersionAlert.show();
+                    mNewVersion = false;
+                }
             }
         }
 
@@ -1448,7 +1496,7 @@ public class StudyOptions extends Activity {
 
         @Override
         public void onPostExecute(Payload data) {
-            // Log.i(AnkiDroidApp.TAG, "onPostExecute");
+            Log.i(AnkiDroidApp.TAG, "onPostExecute");
             if (mProgressDialog != null) {
                 mProgressDialog.dismiss();
             }
